@@ -29,13 +29,13 @@ The full set of files related to this course are owned by Airbnb. To run Analysi
 copy to data/raw/ path.
 
 List of files:
-- calendar.csv
-- listings.csv
-- listings_summary.csv
+- calendar.csv.gz (extract)
+- listings.csv.gz (extract)
+- listings.csv (rename to listings_summary.csv)
 - neighbourhoods.csv
 - neighbourhoods.geojson
-- reviews.csv
-- reviews_summary.csv
+- reviews.csv.gz (extract)
+- reviews.csv (rename to reviews_summary.csv)
 
 ## File Descriptions <a name="files"></a>
 
