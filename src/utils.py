@@ -1,24 +1,52 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 
-def calc_delta_day(df, col_name, drop_col=False):
-    '''
-    Input:
-    df - dataframe with features
-    col_name - columns name with the date(string) to count days up to
-    dataset data ref
+def describe_df(df):
+    ''' Check dtypes and null in all columns of the dataframe.
     
-    Output:
-    data - dataframe with col_name replaced by delta calculated
+    Parameters:
+    df (dataframe) - Input dataframe 
+    
+    Returns:
+    merge_df (dataframe): Dataframe with name, type, count nulls and ratio nulls
+    for each column
     '''
+
+    types = df.dtypes.reset_index()
+    types.columns = ['col', 'type']
+
+    nulls = df.isnull().sum().reset_index()
+    nulls.columns = ['col', 'count_nulls']
+    nulls['ratio_nulls'] = round(nulls['count_nulls']/df.shape[0], 2)
+
+    merge_df = types.merge(nulls, on='col')
+    
+    return merge_df
+
+def calc_delta_day(df, col_name, date_ref, drop_col=False):
+    ''' Calculate the difference between a
+    columns data in a dataframe and a date reference
+    and return in a new column named [delta_ + col_name].
+
+    Parameters:
+    df (dataframe): input dataframe
+    col_name (string): columns name with the dates to be calculated
+    date_ref (string): date formatted as 'yyyy-mm-dd' to be the reference
+    drop_col (bool): Flag to control if original date column will be dropped
+    
+    Returns:
+    data (dataframe): Dataframe with new column with delta calculated values
+    '''
+
     data = df.copy()
     date_aux = pd.to_datetime(data[col_name])
-    date_ref = pd.to_datetime('2020-10-25')
+    date_ref = pd.to_datetime(date_ref)
     calc_delta = date_ref - date_aux
     calc_delta = calc_delta.apply(lambda x: x.days)
     data['delta_' + col_name] = calc_delta
@@ -28,60 +56,87 @@ def calc_delta_day(df, col_name, drop_col=False):
     
     return data
 
+def cast_to_float(df, col_name, remove_chars):
+    ''' Cast a column in a dataframe from strings to floats,
+    removing chars in remove_chars.
 
-def cast_pct_col(df, col_name):
-    '''
-    Input:
-    df - dataframe with features
-    col_name - columns name with the percentage(string) to cast to
-    float
+    Parameters:
+    df (dataframe): input dataframe
+    col_name (string): column name with numerical value in string
+    remove_chars (list): list with chars to be removed, enter a extra '\' previews special chars.
+        eg.: ['\$']
     
-    Output:
-    data - dataframe with col_name casted to float 
+    Returns:
+    data (dataframe): dataframe with col_name casted to float 
     '''
     data = df.copy()
-    aux = data[col_name].str.replace('%', "")
+
+    # remove chars from remove_char list
+    patr = '|'.join(remove_chars)
+    aux = data[col_name].apply(lambda string: re.sub(patr, '', string) if string is not np.nan else string)
+
     aux = aux.str.strip()
     aux = aux.astype('float')
     data[col_name] = aux
+    
+    return data    
+
+def cast_bool(df, col_name):
+    ''' Cast a column in a dataframe from strings
+    't' or 'f' to int 1 or 0 respectively.
+
+    Parameters:
+    df (dataframe): input dataframe
+    col_name (string): columns name with bool values as chars
+    
+    Returns:
+    data (dataframe): dataframe with col_name casted to int 
+    '''
+    
+    data = df.copy()
+    convert_bool = {'t': 1, 'f': 0}
+    data[col_name] = data[col_name].map(convert_bool)
     
     return data
 
-def cast_currency_col(df, col_name):
-    '''
-    Input:
-    df - dataframe with features
-    col_name - columns name with the currency(string) to cast to
-    float
+def create_flag_entire_home(df, col_name, drop_col=False):
+    ''' Create a flag in dataframe with room type is rented entirely.
+
+    Parameters:
+    df (dataframe): dataframe with features
+    col_name (string): columns name with room type
+    drop_col (bool): Flag to control if original date column will be dropped
     
-    Output:
-    data - dataframe with col_name casted to float 
+    Returns:
+    data (dataframe): Dataframe with new column with flag
+    if the place is rented entirely.
     '''
+
     data = df.copy()
- 
-
-    aux = data[col_name].str.replace('$', '')
+    data.loc[data[col_name] == 'Entire home/apt', 'flag_entire_home'] = 1
+    data.flag_entire_home.fillna(0, inplace=True)
     
-    aux = aux.str.replace(',', '')
-    aux = aux.str.strip()
-    aux = aux.astype('float')
-    data[col_name] = aux
-
+    if drop_col:
+        data.drop(col_name, axis=1, inplace=True)
+    
     return data
 
 def train_lmodel(X, y, test_size=0.3, random_state=42):
-    """
-    INPUT:
-    X - Dataframe with features
-    y - Series with target columns
-    test_size - percentage of test size
-    random_state - random seed
+    ''' Split a dataset, train a linear regression model 
+    and calculate Mean Absolute error from train and test
+    set.
+
+    Parameters:
+    X (dataframe): Dataframe with features
+    y (series): target values
+    test_size (float): percentage of test size
+    random_state (int): random seed
     
-    OUTPUT:
-    mae_train - Mean Absolute Error of train set
-    mae_test - Mean Absolute Error of test set
-    lmodel - Fitted model
-    """
+    Returns:
+    mae_train (float): Mean Absolute Error of train set
+    mae_test (float): Mean Absolute Error of test set
+    lmodel (sklearn.linear_model): Fitted model
+    '''
     
     # Split train test set
     X_train, X_test, y_train, y_test = train_test_split(
@@ -98,22 +153,22 @@ def train_lmodel(X, y, test_size=0.3, random_state=42):
     # Calculate MAE for train and test set
     mae_train = mean_absolute_error(y_train, y_train_pred)
     mae_test = mean_absolute_error(y_test, y_pred)
-    
-    print("MAE train: {}".format(round(mae_train, 2)))
-    print("MAE test: {}".format(round(mae_test, 2)))
-    
+
     return (mae_train, mae_test, lmodel)
 
 def processes_mlb(df, col_name, drop_column=False):
-    '''
-    INPUT:
-    df - Dataframe with features
-    col_name - column to be transformed in one-hot encoding
+    ''' Create columns in multiBinarizer encoding from a column in dataframe.
+
+    Parameters:
+    df (dataframe): input dataframe
+    col_name (string): column name to be transformed in multiBinarizer encoding
+    drop_column (bool): Flag to control if original date column will be dropped
     
-    OUTPUT:
-    data - Dataframe with col_name transformed in one-hot encoding
-    mlb - MultiLabelBinarizer fitted
+    Returns:
+    data (dataframe): Dataframe with col_name transformed in multiBinarizer encoding
+    mlb (sklearn.preprocessing): MultiLabelBinarizer fitted
     '''
+
     data = df.reset_index(drop=True).copy()
     mlb = MultiLabelBinarizer()
     
@@ -127,53 +182,17 @@ def processes_mlb(df, col_name, drop_column=False):
     
     return (data, mlb)
 
-
-
-def cast_bool(df, col_name):
-    '''
-    Input:
-    df - dataframe with features
-    col_name - columns name with values 'f' or 't'(string) to cast to
-    a flag 0 or 1 respectively
-    
-    Output:
-    data - dataframe with col_name tranformed in a flag 
-    '''
-    
-    data = df.copy()
-    
-    convert_bool = {'t': 1, 'f': 0}
-    data[col_name] = data[col_name].map(convert_bool)
-    
-    return data
-
-def flag_room_type(df, col_name, drop_col=False):
-    '''
-    Input:
-    df - dataframe with features
-    col_name - columns name with room type
-    
-    Output:
-    data - dataframe with col_name tranformed in a flag 
-    '''
-    data = df.copy()
-    data.loc[data[col_name] == 'Entire home/apt', 'flag_entire_home'] = 1
-    data.flag_entire_home.fillna(0, inplace=True)
-    
-    if drop_col:
-        data.drop(col_name, axis=1, inplace=True)
-    
-    return data
-
 def create_dummies(df, col_name):
-    '''
-    INPUT:
-    df - Dataframe with features
-    col_name - column to be transformed in one-hot encoding
+    ''' Transform a column in dataframe to other columns in one-hot encoding
+
+    Parameters:
+    df (dataframe): input dataframe
+    col_name (string): column to be transformed in one-hot encoding
     
-    OUTPUT:
-    data - Dataframe with col_name transformed in one-hot encoding
+    Returns:
+    data (dataframe): Dataframe with col_name transformed in one-hot encoding
     '''
+
     data = df.copy()
     data = pd.get_dummies(data, prefix=col_name, columns=[col_name])
     
@@ -181,20 +200,25 @@ def create_dummies(df, col_name):
 
 
 def select_features(X, y, cuts):
-    '''
-    INPUT:
-    X - Dataframe with features
-    y - Series with target
-    cuts - list with minimun percentage of class 1 in features
+    ''' Train linear regression models varying percentage minimun of
+    each feature of 1 value. Return the best model fitted (lowest MAE test error),
+    MAE train, MAE test, number of features of each configuration and dataframe with
+    features used to train best model. 
+
+    Parameters:
+    X (dataframe): Dataframe with features
+    y (series): Target values
+    cuts (list): List varying minimun percentage of class 1 in features
     
-    OUTPUT:
-    mae_trains - List of Mininum absolute error in train set for each cut configuration
-    mae_tests - List of Mininum absolute error in test set for each cut configuration
-    num_feats - Number of features for each cut configuration
-    best_model - Best model fitted optimazing MAE test
-    reduce_X - Data set with features used to fit best model
+    Returns:
+    mae_trains (list): List of MAE in train set for each cut configuration
+    mae_tests (list): List of MAE in test set for each cut configuration
+    num_feats (list): Number of features for each cut configuration
+    best_model (sklearn.linear_model): Best model fitted optimazing MAE test
+    reduce_X (dataframe): Data set with features used to fit best model
     
     '''
+
     X_ = X.copy()
     y_ = y.copy()
     
@@ -203,6 +227,7 @@ def select_features(X, y, cuts):
     
     mae_trains, mae_tests, num_feats = [], dict(), []
     
+    # Train different configurations of Linear regression models
     for cut in cuts:
         list_features = list(features_pct[features_pct.pct >= cut].feature)
         reduce_X = X_[list_features].copy()
@@ -217,56 +242,63 @@ def select_features(X, y, cuts):
     list_features = list(features_pct[features_pct.pct >= float(best_cutoff)].feature)
     reduce_X = X_[list_features].copy()
     mae_train, mae_test, best_model = train_lmodel(reduce_X, y_)
-    print(mae_test)
         
     return (mae_trains, mae_tests, num_feats, best_model, reduce_X)
 
 
 def create_month(df, col_date):
-    '''
-    INPUT:
-    df - DataFrame with all vars
-    col_date - String with column name with date 
-    formatted [yyyy-mm-dd] and dtype String
+    ''' Extract month from a column in a dataframe with date to a new column.
+
+    Parameters:
+    df (dataframe): Input dataFrame
+    col_date (string): String with column name with date formatted  as 'yyyy-mm-dd'
     
-    OUTPUT:
-    data - DataFrame with an adicional colummn of month
+    Returns:
+    data (dataframe): DataFrame with an adicional colummn of month
     '''
+
     data = df.copy()
     
     data['month'] = data[col_date].apply(lambda x: x.split('-')[1])
     
     return data
 
-def count_reviews(df, col_name, year):
+def count_column(df, col_name, label_name, label_value):
+    ''' Agregate a dataframe by col_name and count their values.
+    After it, create a column with label value.
+
+    Parameters: 
+    df (dataframe): Input dataframe
+    col_name (string): Column name to aggregate and count lines
+    label_name (string): Name of column that will be created with label_value 
+    label_value (int): Label value
+
+    Returns:
+    data (dataframe): Dataframe with value counts of columns name
     '''
-    INPUT: 
-    df - Dataframe with data
-    col_name - column name (String) to aggregate and count lines
-    year - INT year data ref
-    OUTPUT:
-    data - Dataframe with value counts of columns name
-    
-    '''
+
     data = df.copy()
     data = data[col_name].value_counts().reset_index()
     data.columns = [col_name, 'counts']
     data.sort_values(by=col_name, inplace=True)
     data.reset_index(drop=True, inplace=True)
-    data['year'] = year
+    data[label_name] = label_value
     
     return data
 
+def compare_months(df_prev, df_ref, months):
+    ''' Calculate the ratio between summed values in a year and
+    summed values in a previews year in same period. The return will be
+    a percentage.
 
-def compare_tri(df_prev, df_ref, months):
-    '''
-    INPUT:
-    df_prev - DataFrame with counts per month of previus year
-    df_ref - DataFrame with counts per month of reference year 
-    months - List with number of months included in analysis, 
+    Parameters:
+    df_prev (dataframe): DataFrame with counts per month of previus year
+    df_ref (dataframe): DataFrame with counts per month of reference year 
+    months (list): List with number of months included in analysis, 
     example ['01', '02', 03] - include Jan, Feb and Mar.
-    OUTPUT:
-    pct - Percentage reduced based in previews year.
+
+    Returns:
+    pct (float): Percentage reduced based in previews year.
     '''
     
     data_prev = df_prev.copy()
