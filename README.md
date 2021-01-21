@@ -12,7 +12,7 @@ All aditional python libraries to run this project are in requirements.txt. The 
 To install all dependences, run in comand line:<br />
    <pre>
    <code>
-          pip install -m requirements.txt
+          pip install -r requirements.txt
     </code>
     </pre>
 
